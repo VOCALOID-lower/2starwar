@@ -339,10 +339,10 @@
         // CONSTANTS
         //------------------------------------
 
-        var PI = Math.PI;
-        var TWO_PI = PI * 2;
-        var DEG_TO_RAD = PI / 180;
-        var FPS = 60;
+        const PI = Math.PI;
+        const TWO_PI = PI * 2;
+        const DEG_TO_RAD = PI / 180;
+        const FPS = 60;
 
         //------------------------------------
         // VARS
@@ -471,7 +471,7 @@
                     asteroidLastSpawn = now;
                 }
 
-                if (!ufo && !item && Math.random() < UFO_INCIDENCE) {
+                if (!ufo && Math.random() < UFO_INCIDENCE) {
                     ufo = Ufo.spawn();
                 }
 
@@ -680,35 +680,35 @@
             return Math.floor(Math.random() * (max - min + 1) + min);
         };
 
-        isObject = function (value) {
+        const isObject = (value) => {
             return typeof value === 'object' && value !== null;
         };
 
-        isNumber = function (value) {
+        const isNumber = (value) => {
             return typeof value === 'number';
         };
 
-        isNumeric = function (value) {
+        const isNumeric = (value) => {
             return !isNaN(value) && isFinite(value);
         };
 
-        isString = function (value) {
+        const isString = (value) => {
             return typeof value === 'string';
         };
 
-        isFunction = function (value) {
+        const isFunction = (value) => {
             return typeof value === 'function';
         };
 
-        isArray = function (value) {
+        const isArray = (value) => {
             return Object.prototype.toString.call(value) === '[object Array]';
         };
 
-        isNull = function (value) {
+        const isNull = (value) => {
             return value === null;
         };
 
-        isUndefined = function (value) {
+        const isUndefined = (value) => {
             return typeof value === 'undefined';
         };
 
@@ -807,7 +807,9 @@
             }
         });
 
-
+        /**
+         * BeamPath
+         */
         function BeamPath(points, closed) {
             if (isArray(points)) {
                 for (var i = 0, len = points.length; i < len; i++) {
