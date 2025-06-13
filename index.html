@@ -207,6 +207,25 @@
         // Special weapon array, Randomly appear when you destroy a UFO
         var WEPON_SPECIAL = [
             {
+                name: '闪电链',
+                power: 0.3,
+                speed: 7,
+                speedfixed: false,
+                length: 10,
+                width: 2,
+                color: 'rgb(0,255,255)',
+                shootingInterval: 1000 * 0.4,
+                through: false,
+                explosion: false,
+                auxiliary: "full",
+                meteor: false,
+                chain: {
+                    maxJumps: 3,
+                    range: 150,
+                    decay: 0.8
+                }
+            },
+            {
                 name: '速攻子弹',
                 power: 0.1,
                 speed: 10,
@@ -310,20 +329,6 @@
                 explosion: false,
                 auxiliary: false,
                 meteor: true
-            },
-            {
-                name: '闪电链',
-                power: 0.25,
-                speed: 8,
-                speedfixed: false,
-                length: 15,
-                width: 2,
-                color: 'rgb(0,255,255)',
-                shootingInterval: 1000 * 0.3,
-                through: true,
-                explosion: false,
-                auxiliary: "around",
-                meteor: false
             }
         ];
 
@@ -1198,7 +1203,34 @@
                         this.path = this.renderPath = new ExplosionPath(this.x, this.y, this.explosion);
                         this.exploding = true;
                     }
-                } else if (!this.through) {
+                }
+                // 链式跳跃逻辑
+                else if (this.chain && this.chain.maxJumps > 0) {
+                    var targets = []
+                        .concat(asteroids, [ufo], [item])
+                        .filter(e => e && !e.vanished && typeof e.damage === 'function');
+                    var nearest = null;
+                    var minDist = Infinity;
+                    for (var i = 0; i < targets.length; i++) {
+                        var t = targets[i];
+                        var d = this.distanceTo(t);
+                        if (d < this.chain.range && d > 5 && d < minDist) {
+                            minDist = d;
+                            nearest = t;
+                        }
+                    }
+                    if (nearest) {
+                        this.set(nearest.x, nearest.y);
+                        nearest.damage(this.power, splinters);
+                        this.power *= this.chain.decay;
+                        this.chain.maxJumps--;
+                        return; // 继续存在，不消失
+                    } else {
+                        this.vanished = true;
+                    }
+                }
+
+                else if (!this.through) {
                     this.vanished = true;
                 }
             },
