@@ -1359,7 +1359,9 @@
 
             // Asteroid.MIN_SIZE ~ ASTEROID_MAX_SIZE の間でランダム
             var radius = randUniform(ASTEROID_MAX_SIZE, ASTEROID_MIN_SIZE);
-            return new Asteroid(x, y, radius, angle);
+            var asteroid = new Asteroid(x, y, radius, angle);
+            asteroid.isSplitter = Math.random() < 0.2; // 20% 几率为分裂陨石
+            return asteroid;
         };
 
         Asteroid.prototype = extend(new Point(), {
@@ -1391,12 +1393,21 @@
                 this.radius -= ASTEROID_MAX_SIZE * damage;
 
                 if (this.radius < ASTEROID_MIN_SIZE) {
-                    // ASTEROID_MIN_SIZE を下回るなら消失
                     this.vanished = true;
                     score = SCORE.ASTEROID_DESTROY;
 
+                    // 仅分裂标记陨石，且未被“秒杀子弹”打中（power ≈ 1）
+                    if (this.isSplitter && damage < 0.95 && radiusTemp > ASTEROID_MIN_SIZE * 2) {
+                        for (var s = 0; s < 2; s++) {
+                            var childRadius = randUniform(ASTEROID_MIN_SIZE * 1.5, ASTEROID_MIN_SIZE);
+                            var childAngle = randUniform(TWO_PI);
+                            var child = new Asteroid(this.x, this.y, childRadius, childAngle);
+                            child.isSplitter = true;
+                            asteroids.push(child);
+                        }
+                    }
                 } else {
-                    // 進行角度を最大 30 度ずらす
+                    // 进方向调整和刷新外形
                     this.angle += DEG_TO_RAD * randUniform(30, -30);
                     this.make();
                 }
