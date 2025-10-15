@@ -42,11 +42,6 @@
             width: 100%;
         }
 
-        #start {
-            font-size: 20px;
-            font-weight: bold;
-        }
-
         #title {
             font-size: 24px;
             margin-bottom: 15px;
@@ -95,26 +90,51 @@
         #hud li {
             float: left;
             margin-right: 20px;
+            white-space: nowrap;
+        }
+
+        .menu-btn {
+            font-size: 20px;
+            font-weight: bold;
+            display: inline-block;
+            margin: 5px;
+            padding: 8px 15px;
+            background: #444;
+            border-radius: 3px;
+        }
+
+        .menu-btn:hover {
+            background: #666;
         }
 
         .progress {
-            display: flex;
-            height: 1rem;
+            height: 15px;
+            width: 200px;
+            background-color: #333;
+            border-radius: 7px;
             overflow: hidden;
-            font-size: .75rem;
-            background-color: #e9ecef;
-            border-radius: 1rem;
         }
 
         .progress-bar {
+            height: 100%;
+            background-color: #333333;
+            transition: width 0.3s;
             display: flex;
-            flex-direction: column;
+            align-items: center;
             justify-content: center;
-            overflow: hidden;
-            color: #fff;
-            text-align: center;
-            white-space: nowrap;
-            transition: width .6s ease;
+            font-size: 10px;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            #hud {
+                flex-direction: column;
+                gap: 5px;
+            }
+
+            .progress {
+                width: 150px;
+            }
         }
     </style>
 
@@ -126,17 +146,18 @@
         <canvas id="c" width="1078" height="578"></canvas>
         <ul id="hud">
             <li class="score">分数: <span id="score">0</span></li>
-            <li>武器: <span id="wepon">普通子弹</span> </li>
-            <li>
-                <div class="progress" style="
-                height: 15px;
-                width: 545px;
-            ">
-                    <div id="ufo" class="progress-bar" style="
-                    width: 100%;
-                    background-color:#f14425;
-                    ">
-                        <span id="ufo-hp">2000</span>
+            <li>武器: <span id="wepon">普通子弹</span>(<span id="special-time">-</span>)</li>
+            <li>UFO血量:
+                <div class="progress">
+                    <div id="ufo" class="progress-bar">
+                        <span id="ufo-hp">-</span>
+                    </div>
+                </div>
+            </li>
+            <li>章鱼血量:
+                <div class="progress">
+                    <div id="octopus" class="progress-bar">
+                        <span id="octopus-hp">-</span>
                     </div>
                 </div>
             </li>
@@ -144,7 +165,9 @@
         <div id="menu">
             <h2 id="title"></h2>
             <div id="message"></div>
-            <a href="#" id="start">开始</a>
+            <a href="#" id="start-btn" class="menu-btn">开始游戏</a>
+            <a href="#" id="continue-btn" class="menu-btn" style="display:none">继续游戏</a>
+            <a href="#" id="restart-btn" class="menu-btn" style="display:none">重新开始</a>
         </div>
     </div>
     <!-- partial -->
@@ -197,8 +220,6 @@
             // { range: Explosion range, speed: Explosion speed }
             // * The power of range attacks is half the basic power of weapons
             explosion: false,
-            // 是否有副炮模式，分两侧（flanks）和前后（around），皆有为full
-            auxiliary: "full",
             // 流星模式
             meteor: false
         };
@@ -207,6 +228,25 @@
         // Special weapon array, Randomly appear when you destroy a UFO
         var WEPON_SPECIAL = [
             {
+                name: '追踪子弹',
+                power: 0.1,
+                speed: 7,
+                speedfixed: false,
+                length: 10,
+                width: 2,
+                color: 'rgb(255, 50, 50)',
+                shootingInterval: 1000 * 0.08,
+                through: false,
+                explosion: false,
+                meteor: false,
+                homing: {  // 新增追踪配置
+                    enabled: true,
+                    turnRate: 0.05,  // 转向速率(弧度/帧)
+                    range: 400,      // 追踪范围(像素)
+                    decay: 0.95      // 追踪强度衰减系数
+                }
+            },
+            {
                 name: '闪电链',
                 power: 0.3,
                 speed: 7,
@@ -214,10 +254,9 @@
                 length: 10,
                 width: 2,
                 color: 'rgb(0,255,255)',
-                shootingInterval: 1000 * 0.4,
+                shootingInterval: 1000 * 0.1,
                 through: false,
                 explosion: false,
-                auxiliary: "full",
                 meteor: false,
                 chain: {
                     maxJumps: 3,
@@ -227,22 +266,21 @@
             },
             {
                 name: '速攻子弹',
-                power: 0.1,
-                speed: 10,
+                power: 0.05,
+                speed: 20,
                 speedfixed: false,
                 length: 5,
                 width: 1,
                 color: 'rgb(131, 224, 8)',
-                shootingInterval: 1000 * 0.04,
+                shootingInterval: 1000 * 0.02,
                 through: false,
                 explosion: false,
-                auxiliary: "full",
                 meteor: false
             },
             {
                 name: '秒杀子弹',
                 power: 1,
-                speed: 3,
+                speed: 40,
                 speedfixed: false,
                 length: 15,
                 width: 3,
@@ -250,7 +288,6 @@
                 shootingInterval: 1000 * 0.3,
                 through: false,
                 explosion: false,
-                auxiliary: "full",
                 meteor: false
             },
             {
@@ -264,7 +301,6 @@
                 shootingInterval: 1000 * 0.6,
                 through: true,
                 explosion: false,
-                auxiliary: "full",
                 meteor: false
             },
             {
@@ -278,10 +314,9 @@
                 shootingInterval: 1000 * 0.462,
                 through: false,
                 explosion: {
-                    range: 135,
+                    range: 165,
                     speed: 5.5
                 },
-                auxiliary: "full",
                 meteor: false
             },
             {
@@ -294,12 +329,10 @@
                 width: 2,
                 shootingInterval: 1000 * 0.07,
                 through: true,
-                explosion: false,
                 explosion: {
                     range: 75,
                     speed: 2
                 },
-                auxiliary: "flanks",
                 meteor: false
             },
             {
@@ -313,7 +346,6 @@
                 shootingInterval: 1000 * 20,
                 through: true,
                 explosion: false,
-                auxiliary: "full",
                 meteor: false
             },
             {
@@ -327,7 +359,6 @@
                 shootingInterval: 1000 * 0.2,
                 through: false,
                 explosion: false,
-                auxiliary: false,
                 meteor: true
             }
         ];
@@ -340,18 +371,66 @@
         var UFO_SPEED = 1.8; // UFO のスピード
         var ITEM_SPEED = 0.5; // アイテムのスピード
 
-        // UFO の出現率 0~1
-        var UFO_INCIDENCE = 0.0035;
+        var UFO_INCIDENCE = 0.0035; // UFO出现几率
+        var OCTOPUS_INCIDENCE = 0.002; // 太空章鱼出现几率
+        var TRAIN_INCIDENCE = 0.02; // 列车出现几率
+
+        // 太空列车
+        var TRAIN_CONFIG = {
+            hp: 1000,
+            hpMax: 1000,
+            speed: 2,
+            score: 2000,
+            width: 48, // 3节车厢 x 16像素宽
+            height: 16,
+            mainColor: '#39a',     // 主色调
+            detailColor: '#cef',   // 细节色
+            wheelColor: '#333',    // 车轮颜色
+            lightColor: '#ff9'     // 车灯颜色
+        };
+
+        // 太空章鱼
+        var OCTOPUS_CONFIG = {
+            hp: 4000,
+            hpMax: 4000,
+            speed: UFO_SPEED * 0.3,
+            attackInterval: 5000,
+            score: 17000,
+            changeDestinationChance: 0.005, // 目的地改变几率
+            minDistanceToChange: 100 // 距离目标多近时考虑改变目的地
+        };
+
+        // 章鱼死亡后伴生僚机
+        var WINGMAN_CONFIG = {
+            hp: 800,
+            hpMax: 800,
+            speed: UFO_SPEED * 0.5,
+            attackInterval: 3000,
+            score: 3000,
+            size: 12
+        };
+
+        // 僚机死亡后产生我方炮台
+        var TURRET_CONFIG = {
+            duration: 15000, // 15秒持续时间
+            attackInterval: 1000 * 0.4, // 攻击间隔
+            bulletSpeed: 18, // 子弹速度
+            bulletPower: 0.05, // 子弹威力
+            size: 17 // 炮台大小
+        };
+
 
         // 特殊武器の持続時間
         var SPECIAL_WEPON_TIME = 1000 * 20;
 
         // 各種スコア
         var SCORE = {
-            ASTEROID_DAMAGE: 0.9,
-            ASTEROID_DESTROY: 50,
-            UFO_DAMAGE: 0.4,
-            UFO_DESTROY: 8000
+            ASTEROID_DAMAGE: 0.003, // 小行星伤害分数
+            ASTEROID_DESTROY: 2, // 小行星摧毁分数
+            UFO_DAMAGE: 0.2, // UFO伤害分数(每次命中)
+            UFO_DESTROY: 4000, // UFO摧毁分数(击杀)
+            TRAIN_DAMAGE: 0.4, // Train伤害分数(每次命中)
+            SPACEOCTOPUS_DAMAGE: 0.4, // 章鱼伤害分数(每次命中)
         }
 
         //------------------------------------
@@ -362,6 +441,7 @@
         const TWO_PI = PI * 2;
         const DEG_TO_RAD = PI / 180;
         const FPS = 60;
+        const MAX_SPLINTERS = 500; // 最大碎片数量
 
         //------------------------------------
         // VARS
@@ -380,22 +460,32 @@
         var debris; // Collection of Debri
         var ufo; // Ufo
         var item; // Item
+        var train; // 列车
+        var octopus; // 太空章鱼
+        var wingmans; // 章鱼亡语僚机
+        var friendlyTurrets; // 友方炮台集合
         var asteroidLastSpawn = 0; // 小惑星が最後に復活した時間
         var ufoLastSpawn = 0; // UFO が最後に復活した時間
         var debriLastSpawn = 0; // 背景の星屑が最後に出現した時間
         var fieldRange; // フィールドの範囲
         var score = 0,
-            last_score = 0; // スコア
+            last_score = 0,
+            simple_score = 50000,
+            hard_score = 100000; // スコア           
+        var sessionHighScore = 0;// 本局最高分
         var isPlay = false; // ゲームが開始されているか示す
         var dom = {
             menu: null,
             title: null,
             message: null,
             tweet: null,
-            start: null,
+            startBtn: null,
+            continueBtn: null,
+            restartBtn: null,
             score: null,
             wepon: null
         }
+        var isPaused = false; //游戏是否暂停
 
 
         //------------------------------------
@@ -409,6 +499,9 @@
             window.addEventListener('resize', resize, false);
             resize();
 
+            // 键盘事件监听
+            window.addEventListener('keydown', handleKeyDown, false); // 暂停
+
             mouse = new Point();
 
             dom.menu = document.getElementById('menu');
@@ -418,7 +511,14 @@
             dom.score = document.getElementById('score');
             dom.wepon = document.getElementById('wepon');
 
-            dom.start.addEventListener('click', start, false);
+            dom.startBtn = document.getElementById('start-btn');
+            dom.continueBtn = document.getElementById('continue-btn');
+            dom.restartBtn = document.getElementById('restart-btn');
+
+            dom.startBtn.addEventListener('click', start, false);
+            dom.continueBtn.addEventListener('click', togglePause, false);
+            dom.restartBtn.addEventListener('click', play, false);
+
             canvas.addEventListener('mousemove', mouseMove, false);
             canvas.addEventListener('mousedown', mouseDown, false);
             canvas.addEventListener('mouseup', mouseUp, false);
@@ -469,7 +569,14 @@
         //------------------------------------
 
         function loop() {
+            if (isPaused) return; // 暂停
+
             context.clearRect(0, 0, canvasWidth, canvasHeight);
+
+            // 重置绘图状态
+            context.strokeStyle = 'rgb(255, 255, 255)';
+            context.lineWidth = 1;
+            context.fillStyle = 'rgb(255, 255, 255)';
 
             var now = new Date().getTime();
 
@@ -490,8 +597,19 @@
                     asteroidLastSpawn = now;
                 }
 
+                // UFO
                 if (!ufo && Math.random() < UFO_INCIDENCE) {
                     ufo = Ufo.spawn();
+                }
+
+                // 太空列车
+                if (!train && Math.random() < TRAIN_INCIDENCE) {
+                    train = Train.spawn();
+                }
+
+                // 太空章鱼
+                if (!octopus && Math.random() < OCTOPUS_INCIDENCE) {
+                    octopus = SpaceOctopus.spawn();
                 }
 
                 // Update
@@ -509,6 +627,26 @@
                     } else if (hitDetection(ufo, ship)) {
                         gameOver();
                     }
+                }
+
+                if (train) {
+                    train.update();
+                    if (train.vanished) {
+                        train = null;
+                    } else if (hitDetection(train, ship)) {
+                        gameOver();
+                    }
+                }
+
+                if (octopus) {
+                    octopus.update();
+                    if (!octopus.vanished && hitDetection(octopus, ship)) {
+                        gameOver();
+                    }
+                }
+
+                if (octopus && !octopus.vanished && hitDetection(octopus, ship)) {
+                    gameOver();
                 }
 
                 if (item) {
@@ -534,13 +672,53 @@
                         score += ufo.damage(beam.power, splinters);
                         beam.notifyHit();
                     }
+
+                    if (octopus && hitDetection(beam, octopus)) {
+                        score += octopus.damage(beam.power, splinters);
+                        beam.notifyHit();
+                    }
+
+                    for (var i = 0; i < wingmans.length; i++) {
+                        var wingman = wingmans[i];
+                        if (hitDetection(beam, wingman)) {
+                            wingman.damage(beam.power, splinters);
+                            beam.notifyHit();
+                        }
+                    }
+
+                    // 列车碰撞检测
+                    if (train && hitDetection(beam, train)) {
+                        score += train.damage(beam.power, splinters);
+                        beam.notifyHit();
+                    }
                 });
 
                 asteroids.eachUpdate(function (index, asteroid) {
                     if (hitDetection(asteroid, ship)) {
+                        // 如果有护盾，弹开陨石而不是游戏结束
+                        if (ship.hasShield) {
+                            // 计算弹开方向
+                            var angle = Math.atan2(asteroid.y - ship.y, asteroid.x - ship.x);
+                            asteroid.angle = angle;
+                            asteroid.v = Point.polar(asteroid.v.length() * 1.5, angle); // 增加50%速度
+
+                            // 添加弹开特效
+                            splinters.push(new Splinter(asteroid.x, asteroid.y, 10, 5));
+                        } else {
+                            gameOver();
+                        }
+                    }
+                });
+
+                wingmans.eachUpdate(function (index, wingman) {
+                    if (hitDetection(wingman, ship)) {
                         gameOver();
                     }
                 });
+
+                if (friendlyTurrets) {
+                    friendlyTurrets.eachUpdate();
+                }
 
                 splinters.eachUpdate();
 
@@ -552,36 +730,78 @@
 
             // Draw
 
+
+            // 1. 先绘制背景元素
             context.beginPath();
-            context.strokeStyle = 'rgb(255, 255, 255)';
-            context.lineWidth = 1;
+            if (splinters) splinters.eachDraw(context);
+            if (debris) debris.eachDraw(context);
+            context.fill();
+
+            // 2. 绘制飞机
+            context.beginPath();
             if (ship) ship.draw(context);
-            if (ufo) ufo.draw(context);
-            if (asteroids) asteroids.eachDraw(context);
             context.stroke();
 
-            // Beam は個別に描画
+            // 3. 绘制UFO
+            if (ufo) {
+                context.beginPath();
+                ufo.draw(context);
+                context.stroke();
+            }
+
+            // 4. 绘制太空列车
+            if (train) {
+                context.beginPath();
+                train.draw(context);
+                context.stroke();
+            }
+
+            // 5. 绘制太空章鱼
+            if (octopus) {
+                context.beginPath();
+                octopus.draw(context);
+                context.stroke();
+            }
+
+            // 6. 绘制章鱼僚机
+            if (wingmans) {
+                context.beginPath();
+                wingmans.eachDraw(context);
+                context.stroke();
+            }
+
+            // 7.绘制炮台
+            if (friendlyTurrets) {
+                context.beginPath();
+                friendlyTurrets.eachDraw(context);
+                context.stroke();
+            }
+
+            // 8. 绘制小行星
+            if (asteroids) {
+                context.beginPath();
+                asteroids.eachDraw(context);
+                context.stroke();
+            }
+
+            // 9. 绘制子弹
             if (beams) beams.eachDraw(context);
 
+            // 10. 绘制物品
             if (item) {
                 context.beginPath();
                 context.strokeStyle = item.wepon.color;
-                context.lineWidth = 1;
                 item.draw(context);
                 context.stroke();
             }
 
-            context.beginPath();
-            context.fillStyle = 'rgb(255, 255, 255)';
-            if (splinters) splinters.eachDraw(context);
-            if (debris) debris.eachDraw(context);
-            // Game over
+            // 11. 绘制游戏结束效果
             if (ship && ship.died) {
                 ship.update();
+                context.beginPath();
                 ship.splinter.draw(context);
+                context.fill();
             }
-            context.fill();
-
         }
 
 
@@ -589,45 +809,82 @@
         // FUNCTIONS
         //------------------------------------
 
+        // 开始
         function play() {
+            hideAllButtons();
+            dom.startBtn.style.display = 'inline-block';
+            isPaused = false;
+            dom.menu.style.display = 'none';
+
             ship = new Ship(canvasWidth / 2, canvasHeight / 2, 8);
             mouse.set(ship.x, ship.y);
             beams = new Collection();
             asteroids = new Collection();
+            wingmans = new Collection();
             splinters = new Collection();
+            friendlyTurrets = new Collection();
             ufo = null;
+            octopus = null;
             item = null;
+            train = null;
             score = 0;
             last_score = 0;
+            sessionHighScore = 0;
             isMouseDown = false;
             isPlay = true;
+            document.getElementById("special-time").textContent = "-"; // 重置时间显示
+            document.getElementById("special-time").style.color = "white";
+        }
+
+        function togglePause() {
+            if (!isPlay) return; // 如果游戏没开始，不处理
+
+            isPaused = !isPaused;
+
+            if (isPaused) {
+                dom.title.innerHTML = '游戏暂停';
+                dom.message.innerHTML = '';
+                hideAllButtons();
+                dom.continueBtn.style.display = 'inline-block';
+                dom.menu.style.display = 'block';
+            } else {
+                dom.menu.style.display = 'none';
+            }
+        }
+
+        // 游戏结束
+        function hideAllButtons() {
+            dom.startBtn.style.display = 'none';
+            dom.continueBtn.style.display = 'none';
+            dom.restartBtn.style.display = 'none';
         }
 
         function gameOver() {
             if (score > 1000) {
                 score -= 1000;
                 last_score += 1000;
+                if (score > sessionHighScore) {
+                    sessionHighScore = Math.ceil(score);
+                }
                 return;
             }
+
+            var finalScore = last_score + Math.ceil(score);
+
             ship.destroy();
             isPlay = false;
             dom.title.innerHTML = '游戏结束!';
-            dom.message.innerHTML = '你的分数 ' + (last_score + Math.ceil(score)) + ' 分<br />';
-            dom.message.appendChild(tweetLink());
-            dom.menu.style.display = 'block';
-        }
 
-        function tweetLink() {
-            var exc = score < 1000 ? '...' : score > 3000 ? '!!!' : '!';
-            if (!dom.tweet) {
-                dom.tweet = document.createElement('a');
-                dom.tweet.id = 'tweet';
-                dom.tweet.innerHTML = 'emmmm';
-            }
-            // dom.tweet.href = 'https://twitter.com/intent/tweet?url=https://sss&text=SCORE ' + score + ' PTS' + exc + ' - ASTEROIDS';
-            dom.tweet.href = '#';
-            dom.tweet.target = '';
-            return dom.tweet;
+            // 修改消息显示，包含当前分数和本局最高分数
+            dom.message.innerHTML = `
+            <div id="final-score">你的分数: ${finalScore} 分</div>
+            <div>最高分数: ${sessionHighScore} 分</div>
+            <br />
+        `;
+
+            hideAllButtons();
+            dom.restartBtn.style.display = 'inline-block';
+            dom.menu.style.display = 'block';
         }
 
         // パスの衝突判定を行う
@@ -1069,10 +1326,21 @@
             died: false, // 自機が破壊されているか示す
             splinter: null, // 自機の破片
 
+            lastTurretSpawnTime: 0,      // 上次生成炮台的时间
+            turretSpawnInterval: 7500,  // 15秒生成一个炮台
+            hasAngryBuff: false,         // 是否拥有愤怒buff
+
+            hasShield: false,          // 是否有护盾
+            shieldStartTime: 0,        // 护盾开始时间
+            shieldDuration: 20000,     // 护盾持续时间(20秒)
+            shieldRadius: 30,          // 护盾半径
+
             // 特殊武器を設定する
             setSpecialWepon: function (wepon) {
                 this.specialWeponSetTime = new Date().getTime();
                 this.currentWepon = wepon;
+                document.getElementById("special-time").textContent = Math.ceil(SPECIAL_WEPON_TIME / 1000) + "秒";
+                document.getElementById("special-time").style.color = wepon.color;
             },
 
             // 自機の破壊, died フラグをたてて自機破片用の Splinter を作成する
@@ -1099,25 +1367,37 @@
                 var self = this;
                 setTimeout(function () { self.possibleShooting = true; }, beam.shootingInterval);
 
+                // 流星元素
                 if (!beam.meteor) {
                     beams.push(beam);
                     // 子弹UP
-                    if ((score < 30000) && (beam.auxiliary === "full" || beam.auxiliary === "around")) {
+                    if (score < simple_score) {
                         var beam_3 = new Beam(p.x, p.y + 50, this.angle + 0.01, this.currentWepon);
                         var beam_4 = new Beam(p.x, p.y - 50, this.angle + 0.01, this.currentWepon);
                         beams.push(beam_3);
                         beams.push(beam_4);
                     }
-                    if ((score < 70000) && (beam.auxiliary === "full" || beam.auxiliary === "flanks")) {
+                    if (score < hard_score) {
                         var beam_1 = new Beam(p.x + 50, p.y, this.angle + 0.01, this.currentWepon);
                         var beam_2 = new Beam(p.x - 50, p.y, this.angle + 0.01, this.currentWepon);
                         beams.push(beam_1);
                         beams.push(beam_2);
                     }
                 } else {
-                    for (var i = 0, j = 1078 / 100; i < j; i++) {
-                        var fly_beam = new Beam((i * 100), 5, 2, this.currentWepon);
-                        beams.push(fly_beam);
+                    var beam_num = 0;
+                    if (score < simple_score) {
+                        beam_num = 20;
+                    } else if (score < hard_score) {
+                        beam_num = 15;
+                    } else {
+                        beam_num = 10;
+                    }
+                    for (var i = 0; i < beam_num; i++) { // 一次发射n颗流星
+                        var startX = randUniform(canvasWidth); // 随机X位置
+                        var startY = 1; // 从屏幕上方开始
+                        var angle = Math.PI / 2 + randUniform(Math.PI / 8, -Math.PI / 8); // 基本向下但有轻微随机角度
+                        var meteor = new Beam(startX, startY, angle, this.currentWepon);
+                        beams.push(meteor);
                     }
                 }
             },
@@ -1127,6 +1407,14 @@
                     // 破壊されているなら破片を更新
                     this.splinter.update();
                     return;
+                }
+
+                // 检查护盾是否过期
+                if (this.hasShield) {
+                    var currentTime = new Date().getTime();
+                    if (currentTime - this.shieldStartTime > this.shieldDuration) {
+                        this.hasShield = false;
+                    }
                 }
 
                 this.latest.set(this);
@@ -1160,15 +1448,129 @@
                     p.y = this.y + dx * sin + dy * cos;
                 }
 
-                if (new Date().getTime() - this.specialWeponSetTime > SPECIAL_WEPON_TIME) {
+                // 特殊武器时间显示
+                var currentTime = new Date().getTime();
+                var remainingTime = SPECIAL_WEPON_TIME - (currentTime - this.specialWeponSetTime);
+                if (remainingTime > 0 && this.currentWepon !== WEPON_DEFAULT) {
+                    document.getElementById("special-time").textContent = Math.ceil(remainingTime / 1000) + "秒";
+                    document.getElementById("special-time").style.color = this.currentWepon.color;
+                } else {
+                    document.getElementById("special-time").textContent = "-";
+                    document.getElementById("special-time").style.color = "white";
                     this.currentWepon = WEPON_DEFAULT;
+                }
+
+                // 检查章鱼是否愤怒且自身拥有buff
+                if (octopus && octopus.isAngry && !this.hasAngryBuff) {
+                    this.hasAngryBuff = true;
+                    this.lastTurretSpawnTime = new Date().getTime();
+                    // 立即生成第一个炮台
+                    friendlyTurrets.push(new FriendlyTurret(this.x, this.y));
+                } else if ((!octopus || !octopus.isAngry) && this.hasAngryBuff) {
+                    this.hasAngryBuff = false;
+                }
+
+                // 生成炮台逻辑
+                if (this.hasAngryBuff) {
+                    var currentTime = new Date().getTime();
+                    if (currentTime - this.lastTurretSpawnTime > this.turretSpawnInterval) {
+                        friendlyTurrets.push(new FriendlyTurret(this.x, this.y));
+                        this.lastTurretSpawnTime = currentTime;
+                    }
                 }
             },
 
             draw: function (ctx) {
+                ctx.save();
+                // 护盾
+                if (this.hasShield && !this.died) {
+                    ctx.beginPath();
+                    ctx.lineWidth = 2;
+                    ctx.arc(this.x, this.y, this.shieldRadius, 0, TWO_PI);
+                    ctx.stroke();
+                    ctx.globalAlpha = 0.2;
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                }
+
                 if (!this.died) this.path.draw(ctx);
+                ctx.restore();
             }
         });
+
+        /**
+          * 小开不算开
+          * 按k环形射击
+          * 按n获得特殊子弹
+          * 按m延长特殊子弹时间
+          * 
+          */
+        Ship.prototype.fireCircle = function (beams) {
+            if (!this.possibleShooting) return false;
+            this.possibleShooting = false;
+
+            var self = this;
+            setTimeout(function () { self.possibleShooting = true; }, this.currentWepon.shootingInterval);
+
+            // 发射50颗子弹，均匀分布在一个圆圈上
+            for (var i = 0; i < 50; i++) {
+                var angle = TWO_PI * i / 50;
+                var p = Point.polar(this.size, angle).add(this);
+                var beam = new Beam(p.x, p.y, angle, this.currentWepon);
+
+                // 保持子弹原有属性
+                if (!beam.speedfixed) {
+                    var currentSpeed = this.latest.distanceTo(this);
+                    if (currentSpeed > SHIP_SPEED) currentSpeed = SHIP_SPEED;
+                    beam.speed += currentSpeed;
+                }
+
+                beams.push(beam);
+            }
+        };
+        Ship.prototype.getRandomSpecialWepon = function (beams) {
+            return WEPON_SPECIAL[randInt(WEPON_SPECIAL.length - 1)];
+        };
+        Ship.prototype.extendSpecialWeponTime = function (seconds) {
+            if (this.currentWepon !== WEPON_DEFAULT) {
+                // 增加时间（通过将设置时间向前移动）
+                this.specialWeponSetTime += seconds * 1000;
+
+                // 更新显示
+                var remainingTime = SPECIAL_WEPON_TIME - (new Date().getTime() - this.specialWeponSetTime);
+                document.getElementById("special-time").textContent = Math.ceil(remainingTime / 1000) + "秒";
+                document.getElementById("special-time").style.color = this.currentWepon.color;
+                document.getElementById("special-time").style.fontWeight = "bold";
+
+                // 1秒后恢复字体粗细
+                setTimeout(function () {
+                    document.getElementById("special-time").style.fontWeight = "normal";
+                }, 1000);
+            }
+        };
+        // 修改键盘事件处理函数
+        function handleKeyDown(e) {
+            if (e.key === 'Escape') {
+                togglePause();
+            } else if (e.key === 'k' || e.key === 'K') {
+                if (ship && isPlay && !isPaused) {
+                    ship.fireCircle(beams);
+                }
+            } else if (e.key === 'n' || e.key === 'N') {
+                if (ship && isPlay && !isPaused) {
+                    var randomWepon = ship.getRandomSpecialWepon();
+                    ship.setSpecialWepon(randomWepon);
+                    document.getElementById("wepon").style.color = randomWepon.color;
+                    setTimeout(function () {
+                        document.getElementById("wepon").style.color = "white";
+                    }, 300);
+                }
+            } else if (e.key === 'm' || e.key === 'M') {
+                if (ship && isPlay && !isPaused && ship.currentWepon !== WEPON_DEFAULT) {
+                    ship.extendSpecialWeponTime(1); // 增加1秒
+                }
+            }
+        }
 
 
         /**
@@ -1207,8 +1609,12 @@
                 // 链式跳跃逻辑
                 else if (this.chain && this.chain.maxJumps > 0) {
                     var targets = []
-                        .concat(asteroids, [ufo], [item])
-                        .filter(e => e && !e.vanished && typeof e.damage === 'function');
+                        .concat(asteroids) // 小行星
+                        .concat(ufo ? [ufo] : []) // UFO
+                        .concat(octopus ? [octopus] : []) // 章鱼
+                        .concat(train ? [train] : []) // 火车
+                        .concat(wingmans) // 僚机
+                        .filter(e => e && !e.vanished && typeof e.damage === 'function'); // 过滤无效目标
                     var nearest = null;
                     var minDist = Infinity;
                     for (var i = 0; i < targets.length; i++) {
@@ -1230,7 +1636,7 @@
                     }
                 }
 
-                else if (!this.through) {
+                else if (this.homing || !this.through) {
                     this.vanished = true;
                 }
             },
@@ -1244,10 +1650,75 @@
                     return;
                 }
 
+                // 追踪逻辑
+                if (this.homing && this.homing.enabled) {
+                    // 获取所有有效目标
+                    var targets = [];
+
+                    // 添加小行星
+                    for (var i = 0; i < asteroids.length; i++) {
+                        if (!asteroids[i].vanished) {
+                            targets.push(asteroids[i]);
+                        }
+                    }
+
+                    // 添加UFO、章鱼、列车
+                    if (ufo && !ufo.vanished) targets.push(ufo);
+                    if (octopus && !octopus.vanished) targets.push(octopus);
+                    if (train && !train.vanished) targets.push(train);
+
+                    // 添加僚机
+                    for (var i = 0; i < wingmans.length; i++) {
+                        if (!wingmans[i].vanished) {
+                            targets.push(wingmans[i]);
+                        }
+                    }
+
+                    // 寻找最近的敌人
+                    var nearest = null;
+                    var minDist = Infinity;
+                    for (var i = 0; i < targets.length; i++) {
+                        var t = targets[i];
+                        // 使用中心点距离计算
+                        var d = Math.sqrt(Math.pow(this.x - t.x, 2) + Math.pow(this.y - t.y, 2));
+                        if (d < this.homing.range && d < minDist) {
+                            minDist = d;
+                            nearest = t;
+                        }
+                    }
+
+                    // 如果有目标，调整角度
+                    if (nearest) {
+                        // 计算目标方向
+                        var dx = nearest.x - this.x;
+                        var dy = nearest.y - this.y;
+                        var targetAngle = Math.atan2(dy, dx);
+
+                        // 计算角度差并规范化到[-PI, PI]范围
+                        var angleDiff = targetAngle - this.angle;
+                        while (angleDiff > PI) angleDiff -= TWO_PI;
+                        while (angleDiff < -PI) angleDiff += TWO_PI;
+
+                        // 应用转向，使用更平滑的转向
+                        var turnAmount = this.homing.turnRate;
+                        if (Math.abs(angleDiff) < turnAmount) {
+                            this.angle = targetAngle; // 直接对准
+                        } else {
+                            // 平滑转向
+                            this.angle += (angleDiff > 0 ? 1 : -1) * turnAmount;
+                        }
+
+                        // 更新速度方向但不改变速度大小
+                        var currentSpeed = this.speed;
+                        //this.speed = currentSpeed * 0.98; // 轻微减速增加追踪效果
+                    }
+                }
+
+                // 移动子弹
                 var v = Point.polar(this.speed, this.angle);
                 var renderTail = this.renderPath[1];
 
-                // 画面外に出たら消失
+                // 画面外检测
                 if (!fieldRange.contains(renderTail.x, renderTail.y)) {
                     this.vanished = true;
                     return;
@@ -1258,7 +1729,6 @@
                 // 先頭位置を移動
                 this.add(v);
 
-                // 射出の判定を行って描画用パスを更新する, 射出が完了するまでは後尾の座標は移動しない
                 // 射出の判定を行って描画用パスを更新する, 射出が完了するまでは後尾の座標は移動しない
                 if (this.releaseCompleted) {
                     // 射出が完了しているなら後尾を移動
@@ -1329,9 +1799,9 @@
          */
         function Asteroid(x, y, radius, angle) {
             Point.call(this, x, y);
-            this.radius = radius; // 最大半径
-            this.angle = angle; // 進行方向の角度
-
+            this.radius = radius;
+            this.angle = angle;
+            this.color = 'white'; // 默认白色
             this.make();
         }
 
@@ -1361,6 +1831,7 @@
             var radius = randUniform(ASTEROID_MAX_SIZE, ASTEROID_MIN_SIZE);
             var asteroid = new Asteroid(x, y, radius, angle);
             asteroid.isSplitter = Math.random() < 0.2; // 20% 几率为分裂陨石
+            asteroid.hasSplit = false; // 初始被攻击分裂状态
             return asteroid;
         };
 
@@ -1388,33 +1859,55 @@
 
                 var radiusTemp = this.radius;
                 var debrisNum = Math.round(32 * damage);
-                var score = SCORE.ASTEROID_DAMAGE;
+                var score_asteroid = SCORE.ASTEROID_DAMAGE;
 
                 this.radius -= ASTEROID_MAX_SIZE * damage;
 
                 if (this.radius < ASTEROID_MIN_SIZE) {
                     this.vanished = true;
-                    score = SCORE.ASTEROID_DESTROY;
-
-                    // 仅分裂标记陨石，且未被“秒杀子弹”打中（power ≈ 1）
-                    if (this.isSplitter && damage < 0.95 && radiusTemp > ASTEROID_MIN_SIZE * 2) {
-                        for (var s = 0; s < 2; s++) {
-                            var childRadius = randUniform(ASTEROID_MIN_SIZE * 1.5, ASTEROID_MIN_SIZE);
-                            var childAngle = randUniform(TWO_PI);
-                            var child = new Asteroid(this.x, this.y, childRadius, childAngle);
-                            child.isSplitter = true;
-                            asteroids.push(child);
-                        }
-                    }
+                    score_asteroid = SCORE.ASTEROID_DESTROY;
                 } else {
                     // 进方向调整和刷新外形
                     this.angle += DEG_TO_RAD * randUniform(30, -30);
                     this.make();
                 }
 
+                // 检查是否是分裂陨石且是第一次被击中
+                if (this.isSplitter && !this.hasSplit) {
+                    this.hasSplit = true; // 标记为已分裂
+                    var splitCount = randInt(4, 2); // 分裂为2~4个新陨石
+
+                    // 计算总大小百分比（保持总量在80%-120%之间）
+                    var totalPercentage = randUniform(1.2, 0.8);
+
+                    for (var s = 0; s < splitCount; s++) {
+                        // 分配百分比（最后一个用剩余部分）
+                        var percentage = s === splitCount - 1 ?
+                            totalPercentage :
+                            randUniform(totalPercentage * 0.7, totalPercentage * 0.3);
+                        totalPercentage -= percentage;
+
+                        var childRadius = radiusTemp * percentage;
+                        // 确保新陨石不小于最小尺寸
+                        childRadius = Math.max(childRadius, ASTEROID_MIN_SIZE);
+
+                        var childAngle = randUniform(TWO_PI);
+                        var child = new Asteroid(this.x, this.y, childRadius, childAngle);
+
+                        // 新陨石有50%几率也是分裂陨石
+                        child.isSplitter = Math.random() < 0.3;
+
+                        // 给新陨石一个初始速度（基于原速度和随机方向）
+                        var speedFactor = randUniform(1.5, 0.5);
+                        child.v = Point.polar(this.v.length() * speedFactor, childAngle);
+
+                        asteroids.push(child);
+                    }
+                }
+
                 splinters.push(new Splinter(this.x, this.y, radiusTemp, debrisNum));
 
-                return score;
+                return score_asteroid;
             },
 
             update: function () {
@@ -1432,6 +1925,7 @@
             },
 
             draw: function (ctx) {
+                ctx.strokeStyle = this.color;
                 this.path.draw(ctx);
             }
         });
@@ -1495,24 +1989,23 @@
 
                 var splinterRadius = 10;
                 var splinterNum = 5;
-                var score = SCORE.UFO_DAMAGE;
+                var score_ufo = SCORE.UFO_DAMAGE;
 
                 this.hp -= damage * 100;
                 // 血量条
                 document.getElementById("ufo").style.width = (this.hp / 2000) * 100 + "%";
-                document.getElementById("ufo-hp").innerHTML = this.hp;
+                document.getElementById("ufo-hp").innerHTML = Math.floor(this.hp);
 
-                if ((this.hp < 1100 && this.hp > 900) || (this.hp < 1500 && this.hp > 1450) || (this.hp < 500 && this.hp > 450)) {
+                // 道具掉落
+                if (Math.random() < 0.15) {
                     item = new Item(ufo.x, ufo.y);
-                    document.getElementById("ufo").style["background-color"] = "#0d6efd";// 奖励时间色彩
-                } else {
-                    document.getElementById("ufo").style["background-color"] = "#f14425";
                 }
+
                 if (this.hp <= 0) {
                     this.vanished = true;
                     splinterRadius = 25;
                     splinterNum = 20;
-                    score = SCORE.UFO_DESTROY;
+                    score_ufo = SCORE.UFO_DESTROY;
                 }
 
                 splinters.push(new Splinter(this.x, this.y, splinterRadius, splinterNum));
@@ -1520,7 +2013,7 @@
                 // 4 フレームごとに 1 回　で 10 回点滅
                 this.damagedBlink = 40;
 
-                return score;
+                return score_ufo;
             },
 
             update: function () {
@@ -1562,6 +2055,840 @@
 
 
         /**
+          * Train
+          * 
+          * @super Point
+          */
+        function Train(x, y) {
+            Point.call(this, x, y);
+            extend(this, TRAIN_CONFIG);
+
+            this.path = new Path([
+                new Point(x - this.width / 2, y - this.height / 2),
+                new Point(x + this.width / 2, y - this.height / 2),
+                new Point(x + this.width / 2, y + this.height / 2),
+                new Point(x - this.width / 2, y + this.height / 2)
+            ]);
+
+            // 随机方向
+            this.angle = randUniform(TWO_PI);
+            this.v = Point.polar(this.speed, this.angle);
+        }
+
+        Train.spawn = function () {
+            var x, y, side = randInt(3);
+
+            if (side === 0 || side === 1) {
+                y = randUniform(canvasHeight + 30, -30);
+                x = (side === 0) ? -30 : canvasWidth + 30;
+            } else {
+                x = randUniform(canvasWidth + 30, -30);
+                y = (side === 2) ? -30 : canvasHeight + 30;
+            }
+
+            return new Train(x, y);
+        };
+
+        Train.prototype = extend(new Point(), {
+            vanished: false,
+            originalSpeed: TRAIN_CONFIG.speed, // 原始速度记录
+
+            damage: function (damage, splinters) {
+                if (damage <= 0) return;
+
+                this.hp -= damage * 100;
+
+                // 当血量低于1/3且未加速时，速度翻倍
+                if (this.hp <= this.hpMax / 3 && this.speed === this.originalSpeed) {
+                    this.speed = this.originalSpeed * 2;
+                    // 速度变化时更新速度向量
+                    this.v = Point.polar(this.speed, this.angle);
+                }
+
+                if (this.hp <= 0) {
+                    this.vanished = true;
+                    splinters.push(new Splinter(this.x, this.y, 15, 10));
+
+                    // 给玩家添加护盾
+                    if (ship && !ship.died) {
+                        ship.hasShield = true;
+                        ship.shieldStartTime = new Date().getTime();
+                    }
+
+                    return TRAIN_CONFIG.score; // 击毁得分
+                }
+                return SCORE.TRAIN_DAMAGE;
+            },
+
+            update: function () {
+                if (this.vanished) return;
+
+                // 移动
+                this.add(this.v);
+                this.path.eachPoints(function (p) { p.add(this.v); }.bind(this));
+
+                // 边界检查
+                if (!fieldRange.contains(this.x, this.y, Math.max(this.width, this.height) * 2)) {
+                    this.vanished = true;
+                    return;
+                }
+
+                // 改变陨石方向
+                for (var i = 0; i < asteroids.length; i++) {
+                    var asteroid = asteroids[i];
+                    if (hitDetection(this, asteroid)) {
+                        asteroid.angle = this.angle + randUniform(PI / 4, -PI / 4);
+                        asteroid.v = Point.polar(asteroid.v.length(), asteroid.angle);
+                        asteroid.v.scale(1.2);
+                    }
+                }
+            },
+
+            draw: function (ctx) {
+                if (this.vanished) return;
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+
+                // 绘制三节车厢
+                for (var i = 0; i < 3; i++) {
+                    var offset = -i * 16;
+
+                    // 车厢主体
+                    ctx.fillStyle = this.mainColor;
+                    ctx.fillRect(offset - 8, -8, 16, 16);
+
+                    // 车厢边框
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(offset - 8, -8, 16, 16);
+
+                    // 车窗 (两扇)
+                    ctx.fillStyle = this.detailColor;
+                    ctx.fillRect(offset - 5, -5, 4, 3);
+                    ctx.fillRect(offset + 1, -5, 4, 3);
+
+                    // 车轮
+                    ctx.fillStyle = this.wheelColor;
+                    ctx.beginPath();
+                    ctx.arc(offset - 4, 9, 3, 0, TWO_PI); // 左轮
+                    ctx.arc(offset + 4, 9, 3, 0, TWO_PI);  // 右轮
+                    ctx.fill();
+                }
+
+                // 车头灯
+                ctx.fillStyle = this.lightColor;
+                ctx.beginPath();
+                ctx.arc(8, 0, 3, 0, TWO_PI);
+                ctx.fill();
+
+                // 连接挂钩
+                ctx.strokeStyle = '#777';
+                ctx.lineWidth = 2;
+                for (var i = 1; i < 3; i++) {
+                    var pos = -i * 16 + 8;
+                    ctx.beginPath();
+                    ctx.moveTo(pos, -4);
+                    ctx.lineTo(pos, 4);
+                    ctx.stroke();
+                }
+
+                // 血量条
+                var hpWidth = 49 * (this.hp / this.hpMax);
+                ctx.fillStyle = this.hp < this.hpMax / 3 ? '#f44' : '#6f6';
+                ctx.fillRect(-41, 15, hpWidth, 2);
+
+                ctx.restore();
+            }
+        });
+
+
+        /**
+         * SpaceOctopus
+         * 
+         * @super Point
+         */
+        function SpaceOctopus(x, y) {
+            Point.call(this, x, y);
+            extend(this, OCTOPUS_CONFIG);
+
+            // 初始化章鱼血条显示
+            document.getElementById("octopus").style.width = "100%";
+            document.getElementById("octopus").style["background-color"] = "#8a2be2";
+            document.getElementById("octopus-hp").innerHTML = "4000";
+
+            // 创建主体路径 - 改为更像章鱼头的形状
+            this.path = new Path();
+            // 主体椭圆形
+            for (var i = 0; i < 16; i++) {
+                var angle = TWO_PI * i / 16;
+                // 创建椭圆形而非正圆形
+                var radiusX = 20;
+                var radiusY = 15;
+                if (i > 4 && i < 12) radiusY = 18; // 底部稍微宽一些
+                this.path.push(new Point(
+                    this.x + radiusX * Math.cos(angle),
+                    this.y + radiusY * Math.sin(angle)
+                ));
+            }
+
+            // 眼睛
+            this.eyes = [
+                { x: -8, y: -5, size: 3 },  // 左眼
+                { x: 8, y: -5, size: 3 }    // 右眼
+            ];
+
+            // 触手路径单独存储
+            this.tentaclePaths = [];
+            // 8条触手 - 现在每条触手有3个关节
+            this.tentacles = [];
+            for (var i = 0; i < 8; i++) {
+                this.tentacles.push(new Tentacle(this, i));
+            }
+
+            this.destination = new Point(randUniform(canvasWidth), randUniform(canvasHeight));
+            this.v = new Point();
+            this.attackTimer = 0;
+            this.isAngry = false;
+        }
+
+        SpaceOctopus.prototype = extend(new Point(), {
+            fire: function () {
+                // 8方向发射陨石
+                for (var i = 0; i < 8; i++) {
+                    var angle = TWO_PI * i / 8;
+
+                    var asteroidSize = this.isAngry ?
+                        randUniform(120, 30) : // 愤怒状态下大小翻倍
+                        randUniform(60, 15);    // 普通状态
+
+                    var asteroid = new Asteroid(
+                        this.x,
+                        this.y,
+                        asteroidSize, // 随机大小
+                        angle // 发射方向
+                    );
+
+                    // 愤怒状态下必定分裂
+                    if (this.isAngry) {
+                        asteroid.isSplitter = true;
+                    }
+
+                    // 给陨石一个初始速度
+                    var speed;
+                    if (score < 10000) {
+                        var speed = randUniform(3, 1);
+                    } else if (score < simple_score) {
+                        var speed = randUniform(5, 1);
+                    } else if (score < hard_score) {
+                        var speed = randUniform(7, 1);
+                    } else {
+                        var speed = randUniform(10, 1);
+                    }
+                    asteroid.v = Point.polar(speed, angle);
+                    asteroids.push(asteroid);
+                }
+            },
+
+            damage: function (damage, splinters) {
+                if (damage <= 0 || this.vanished) return 0;
+
+                var splinterRadius = 10;
+                var splinterNum = 5;
+                var score_spaceoctopus = SCORE.SPACEOCTOPUS_DAMAGE;
+
+                this.hp -= damage * 100;
+
+                var hpPercent = Math.max(0, (this.hp / this.hpMax) * 100);
+                document.getElementById("octopus").style.width = hpPercent + "%";
+                document.getElementById("octopus-hp").innerHTML = Math.max(0, Math.floor(this.hp));
+
+                if (this.hp <= 0) {
+                    this.vanished = true;
+                    splinterRadius = 25;
+                    splinterNum = 20;
+                    score_spaceoctopus = OCTOPUS_CONFIG.score;
+
+                    document.getElementById("octopus").style.width = "0%";
+                    document.getElementById("octopus-hp").innerHTML = "0";
+
+                    // 章鱼死亡时生成僚机：每多一万分额外生成一个，最少一个
+                    var baseWingmanCount = 1;
+                    var additionalWingman = Math.floor(score / 10000);
+                    var wingmanCount = baseWingmanCount + additionalWingman;
+
+                    for (var i = 0; i < wingmanCount; i++) {
+                        var angle = TWO_PI * i / wingmanCount;
+                        var offsetX = Math.cos(angle) * 50;
+                        var offsetY = Math.sin(angle) * 50;
+                        var wingman = new Wingman(this.x + offsetX, this.y + offsetY);
+                        wingmans.push(wingman);
+                    }
+
+                    octopus = null;
+                    return score_spaceoctopus;
+                }
+
+                if (!this.vanished) {
+                    splinters.push(new Splinter(this.x, this.y, splinterRadius, splinterNum));
+                    this.damagedBlink = 40;
+                }
+
+                if (this.hp / this.hpMax <= 0.5 && !this.isAngry && !this.vanished) {
+                    this.isAngry = true;
+                    this.tentacles.forEach(t => t.extend());
+                    this.attackInterval *= 0.35;
+                    document.getElementById("octopus").style["background-color"] = "#c13133";
+                }
+
+                return score_spaceoctopus;
+            },
+
+            draw: function (ctx) {
+                if (this.vanished) return;
+
+                // 保存当前绘图状态
+                ctx.save();
+
+                // 绘制主体
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgb(255, 255, 255)';
+                ctx.lineWidth = 1;
+                this.path.draw(ctx);
+                ctx.stroke();
+
+                // 绘制眼睛
+                ctx.fillStyle = 'white';
+                this.eyes.forEach(eye => {
+                    ctx.beginPath();
+                    ctx.arc(this.x + eye.x, this.y + eye.y, eye.size, 0, TWO_PI);
+                    ctx.fill();
+
+                    // 愤怒状态下眼睛变红
+                    if (this.isAngry) {
+                        ctx.fillStyle = 'red';
+                        ctx.beginPath();
+                        ctx.arc(this.x + eye.x, this.y + eye.y, eye.size / 2, 0, TWO_PI);
+                        ctx.fill();
+                        ctx.fillStyle = 'white';
+                    }
+                });
+
+                // 绘制触手
+                ctx.strokeStyle = 'rgb(255, 255, 255)';
+                this.tentacles.forEach(t => t.draw(ctx));
+
+                // 恢复绘图状态
+                ctx.restore();
+            }
+        });
+
+        SpaceOctopus.prototype.update = function () {
+            // 已消失的章鱼不再更新
+            if (this.vanished) return;
+
+            // 更新目的地逻辑 - 更随机且更少改变目的地
+            var v = this.v;
+            var destination = this.destination;
+
+            // 降低改变目的地的频率，增加随机性
+            if (Math.random() < 0.005 || this.distanceTo(destination) < 100) {
+                // 随机选择屏幕内的一个位置，但避免太靠近边缘
+                destination.set(
+                    randUniform(canvasWidth * 0.9, canvasWidth * 0.1),
+                    randUniform(canvasHeight * 0.9, canvasHeight * 0.1)
+                );
+            }
+
+            v.set(destination).sub(this);
+
+            // 基础速度并增加随机速度变化
+            var baseSpeed = this.speed * (0.5 + Math.random() * 0.3); // 基础速度在50%-80%之间波动
+            var speed = this.isAngry ? baseSpeed * 1.2 : baseSpeed; // 愤怒状态速度加成减少
+
+            var dist = v.length();
+            if (dist > speed) {
+                v.normalize(speed);
+            }
+
+            // 减小波浪效果幅度，使其不影响主要移动方向
+            var waveX = Math.sin(Date.now() / 800) * 10;
+            var waveY = Math.cos(Date.now() / 700) * 15;
+
+            // 应用移动和波浪效果
+            this.x += v.x + waveX * 0.2;
+            this.y += v.y + waveY * 0.5;
+
+            // 更新主体位置
+            this.path.eachPoints(function (p, i) {
+                p.x = this.x + Math.cos(TWO_PI * i / 12) * 15;
+                p.y = this.y + Math.sin(TWO_PI * i / 12) * 15;
+            }.bind(this));
+
+            // 攻击逻辑
+            this.attackTimer += 1000 / FPS;
+            if (this.attackTimer >= this.attackInterval) {
+                this.fire();
+                this.attackTimer = 0;
+            }
+
+            // 更新触手
+            this.tentacles.forEach(t => t.update());
+        };
+
+        // 触手类
+        function Tentacle(parent, index) {
+            this.parent = parent;
+            this.index = index;
+            this.segments = []; // 触手分段
+            this.length = 25;  // 初始长度
+            this.extended = false;
+            this.angle = TWO_PI * this.index / 8;
+
+            // 初始化3个触手关节
+            for (var i = 0; i < 3; i++) {
+                this.segments.push({
+                    x: 0, y: 0,
+                    length: this.length / 3,
+                    angle: this.angle
+                });
+            }
+        }
+
+        Tentacle.prototype = {
+            extend: function () {
+                this.length = 40;  // 伸长触手
+                this.extended = true;
+                // 更新分段长度
+                for (var i = 0; i < this.segments.length; i++) {
+                    this.segments[i].length = this.length / 3;
+                }
+            },
+
+            update: function () {
+                // 更自然的触手摆动效果
+                var waveSpeed = this.extended ? 600 : 800;
+                var waveSize = this.extended ? 8 : 4;
+
+                // 基础角度
+                this.angle = TWO_PI * this.index / 8 + Math.sin(Date.now() / 1000) * 0.2;
+
+                // 更新每个触手分段
+                var prevX = this.parent.x;
+                var prevY = this.parent.y;
+
+                for (var i = 0; i < this.segments.length; i++) {
+                    var segment = this.segments[i];
+
+                    // 添加波浪效果 - 每个分段有不同的相位
+                    var segmentWave = Math.sin(Date.now() / waveSpeed + this.index * 0.5 + i * 0.3) * waveSize;
+
+                    // 更新分段角度
+                    segment.angle = this.angle + segmentWave * 0.1;
+
+                    // 计算分段末端位置
+                    segment.x = prevX + Math.cos(segment.angle) * segment.length;
+                    segment.y = prevY + Math.sin(segment.angle) * segment.length;
+
+                    prevX = segment.x;
+                    prevY = segment.y;
+                }
+            },
+
+            draw: function (ctx) {
+                // 绘制触手 - 现在有分段效果
+                var prevX = this.parent.x;
+                var prevY = this.parent.y;
+
+                // 触手根部稍微粗一些
+                ctx.lineWidth = 2;
+
+                for (var i = 0; i < this.segments.length; i++) {
+                    var segment = this.segments[i];
+
+                    ctx.beginPath();
+                    ctx.moveTo(prevX, prevY);
+                    ctx.lineTo(segment.x, segment.y);
+                    ctx.stroke();
+
+                    // 逐渐变细
+                    ctx.lineWidth = Math.max(1, 2 - i * 0.5);
+
+                    prevX = segment.x;
+                    prevY = segment.y;
+                }
+
+                // 恢复默认线宽
+                ctx.lineWidth = 1;
+            }
+        };
+
+        //生成
+        SpaceOctopus.spawn = function () {
+            // 如果章鱼已经存在且未消失，不生成新章鱼
+            if (octopus && !octopus.vanished) return null;
+
+            var x, y, side = randInt(3);
+            if (side === 0 || side === 1) {
+                y = randUniform(canvasHeight + 50, -50);
+                x = (side === 0) ? -50 : canvasWidth + 50;
+            } else {
+                x = randUniform(canvasWidth + 50, -50);
+                y = (side === 2) ? -50 : canvasHeight + 50;
+            }
+
+            // 重置血条显示
+            document.getElementById("octopus").style.width = "100%";
+            document.getElementById("octopus").style["background-color"] = "#8a2be2";
+            document.getElementById("octopus-hp").innerHTML = "4000";
+
+            return new SpaceOctopus(x, y);
+        };
+
+
+        /**
+         * Wingman
+         * 
+         * @super Point
+         */
+        function Wingman(x, y) {
+            Point.call(this, x, y);
+            extend(this, WINGMAN_CONFIG);
+
+
+            // 生成随机颜色（确保与白色边框区分）
+            this.color = getRandomColor();
+            this.attackPattern = ['single', 'triple', 'spread'][randInt(2)]; // 随机选择攻击模式
+
+            // 生成特效相关
+            this.spawnTime = new Date().getTime();
+            this.spawnRadius = 0;
+            this.maxSpawnRadius = this.size * 3;
+
+            // 创建路径
+            this.path = new Path();
+            for (var i = 0; i < 8; i++) {
+                var angle = TWO_PI * i / 8;
+                this.path.push(new Point(
+                    this.x + this.size * Math.cos(angle),
+                    this.y + this.size * Math.sin(angle)
+                ));
+            }
+
+            this.destination = new Point(randUniform(canvasWidth), randUniform(canvasHeight));
+            this.v = new Point();
+            this.attackTimer = 0;
+
+            // 初始无敌时间
+            this.invincible = true;
+            setTimeout(() => { this.invincible = false; }, 1000);
+
+            // 每个僚机生成时随机赋予一个固定速度（0.3x ~ 1.7x 基础速度）
+            this.speed = WINGMAN_CONFIG.speed * (0.3 + Math.random() * 1.4);
+        }
+
+        // 生成随机颜色函数
+        function getRandomColor() {
+            // 使用HSL确保颜色不过于灰暗或刺眼
+            var hue = randUniform(360);
+            var saturation = randUniform(70, 30); // 30-70%饱和度
+            var lightness = randUniform(70, 40);  // 40-70%亮度
+            return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        }
+
+        Wingman.prototype = extend(new Point(), {
+            vanished: false,
+
+            damage: function (damage, splinters) {
+                if (this.invincible) return 0; // 无敌状态下不受伤害
+
+                this.hp -= damage * 100;
+
+                if (this.hp <= 0) {
+                    this.vanished = true;
+                    splinters.push(new Splinter(this.x, this.y, 15, 10));
+
+                    // 生成友方炮台
+                    friendlyTurrets.push(new FriendlyTurret(this.x, this.y));
+
+                    return this.score;
+                }
+                return 0;
+            },
+        });
+
+        Wingman.prototype.fire = function () {
+            var angleToShip = ship ? this.angleTo(ship) : randUniform(TWO_PI);
+
+            switch (this.attackPattern) {
+                case 'single':
+                    // 单发精准射击
+                    var asteroid = new Asteroid(
+                        this.x, this.y,
+                        randUniform(20, 10),
+                        angleToShip
+                    );
+                    asteroid.v = Point.polar(4, angleToShip);
+                    asteroids.push(asteroid);
+                    break;
+
+                case 'triple':
+                    // 三连发
+                    for (var i = -1; i <= 1; i++) {
+                        var angle = angleToShip + i * 0.2;
+                        var asteroid = new Asteroid(
+                            this.x, this.y,
+                            randUniform(15, 8),
+                            angle
+                        );
+                        asteroid.v = Point.polar(3.5, angle);
+                        asteroids.push(asteroid);
+                    }
+                    break;
+
+                case 'spread':
+                    // 扇形散射
+                    for (var i = 0; i < 5; i++) {
+                        var angle = angleToShip + randUniform(0.5, -0.5);
+                        var asteroid = new Asteroid(
+                            this.x, this.y,
+                            randUniform(12, 6),
+                            angle
+                        );
+                        asteroid.v = Point.polar(3, angle);
+                        asteroids.push(asteroid);
+                    }
+                    break;
+            }
+        };
+
+        Wingman.prototype.update = function () {
+            if (this.vanished) return;
+
+            // 生成动画
+            var spawnProgress = (new Date().getTime() - this.spawnTime) / 500; // 0.5秒生成动画
+            if (spawnProgress < 1) {
+                this.spawnRadius = this.maxSpawnRadius * Math.sin(spawnProgress * PI);
+                return; // 生成动画期间不移动
+            }
+
+            // 正常移动逻辑
+            if (octopus && !octopus.vanished) {
+                this.destination.set(octopus.x, octopus.y);
+
+                var v = this.v.set(this.destination).sub(this);
+                var dist = v.length();
+
+                if (dist > this.speed) {
+                    v.normalize(this.speed);
+                }
+
+                this.add(v);
+                this.path.eachPoints(function (p, i) { p.add(v); });
+            }
+            // 如果没有章鱼，僚机停止移动
+
+            // 攻击逻辑
+            this.attackTimer += 1000 / FPS;
+            if (this.attackTimer >= this.attackInterval) {
+                this.fire();
+                this.attackTimer = 0;
+            }
+        };
+
+        Wingman.prototype.draw = function (ctx) {
+            ctx.save();
+
+            // 绘制生成特效
+            if (this.spawnRadius > 0) {
+                ctx.beginPath();
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 2;
+                ctx.arc(this.x, this.y, this.spawnRadius, 0, TWO_PI);
+                ctx.stroke();
+
+                // 中心闪光点
+                ctx.beginPath();
+                ctx.fillStyle = this.color;
+                ctx.arc(this.x, this.y, this.size * (1 - this.spawnRadius / this.maxSpawnRadius), 0, TWO_PI);
+                ctx.fill();
+            }
+
+            // 绘制僚机主体
+            ctx.beginPath();
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 2;
+            this.path.draw(ctx);
+            ctx.stroke();
+
+            // 绘制血量指示器（外圈圆弧）
+            if (!this.invincible) { // 无敌状态下不显示血量
+                var hpPercent = this.hp / this.hpMax;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size + 8, -PI / 2, -PI / 2 + TWO_PI * hpPercent);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // 绘制中心点(无敌时闪烁)
+            if (!this.invincible || Math.floor(Date.now() / 100) % 2 === 0) {
+                ctx.beginPath();
+                ctx.fillStyle = this.color;
+                ctx.arc(this.x, this.y, 3, 0, TWO_PI);
+                ctx.fill();
+            }
+
+            // 攻击方向标识
+            if (ship && !this.vanished && !this.invincible) {
+                ctx.beginPath();
+                ctx.strokeStyle = 'white'; // 短线颜色
+                ctx.lineWidth = 1; // 短线宽度
+
+                // 计算指向玩家的角度
+                var angle = Math.atan2(ship.y - this.y, ship.x - this.x);
+
+                // 从中心点向外绘制10像素的线
+                var lineLength = 18;
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(
+                    this.x + Math.cos(angle) * lineLength,
+                    this.y + Math.sin(angle) * lineLength
+                );
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        };
+
+
+        /**
+         * FriendlyTurret
+         * 
+         * @super Point
+         */
+        function FriendlyTurret(x, y) {
+            Point.call(this, x, y);
+            this.spawnTime = new Date().getTime();
+            this.size = TURRET_CONFIG.size;
+            this.attackTimer = 0;
+
+            // 创建炮台路径
+            this.path = new Path();
+            for (var i = 0; i < 8; i++) {
+                var angle = TWO_PI * i / 8;
+                this.path.push(new Point(
+                    this.x + this.size * Math.cos(angle),
+                    this.y + this.size * Math.sin(angle)
+                ));
+            }
+        }
+
+        FriendlyTurret.prototype = extend(new Point(), {
+            vanished: false,
+
+            update: function () {
+                // 检查是否超时（只在章鱼存在时倒计时）
+                if (!octopus || octopus.vanished) {
+                    this.spawnTime += 1000 / FPS; // 章鱼存在时才增加时间
+                }
+
+                // 检查是否超时
+                if (new Date().getTime() - this.spawnTime > TURRET_CONFIG.duration) {
+                    this.vanished = true;
+                    return;
+                }
+
+                // 攻击逻辑（只在章鱼存在时攻击）
+                this.attackTimer += 1000 / FPS;
+                if (this.attackTimer >= TURRET_CONFIG.attackInterval && octopus && !octopus.vanished) {
+                    this.fire();
+                    this.attackTimer = 0;
+                }
+            },
+
+            fire: function () {
+                if (!octopus || octopus.vanished) return;
+
+                // 计算朝向章鱼的角度
+                var angle = this.angleTo(octopus);
+
+                // 创建子弹配置
+                var bulletConfig = {
+                    name: '炮台子弹',
+                    power: TURRET_CONFIG.bulletPower,
+                    speed: TURRET_CONFIG.bulletSpeed,
+                    length: 10,
+                    width: 2,
+                    color: 'rgb(0, 200, 255)',
+                    shootingInterval: TURRET_CONFIG.attackInterval,
+                    through: false,
+                    explosion: {
+                        range: 140,
+                        speed: 4
+                    },
+                };
+
+                // 发射子弹
+                var bullet = new Beam(this.x, this.y, angle, bulletConfig);
+                beams.push(bullet);
+            },
+
+            draw: function (ctx) {
+                ctx.save();
+
+                // 绘制炮台主体
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgb(0, 200, 255)';
+                ctx.lineWidth = 2;
+                this.path.draw(ctx);
+                ctx.stroke();
+
+                // 绘制炮管（指向章鱼）
+                if (octopus && !octopus.vanished) {
+                    var angle = this.angleTo(octopus);
+                    var barrelLength = this.size;
+
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(
+                        this.x + Math.cos(angle) * barrelLength,
+                        this.y + Math.sin(angle) * barrelLength
+                    );
+                    ctx.stroke();
+                }
+
+                // 绘制剩余时间指示器
+                var progress = 1 - (new Date().getTime() - this.spawnTime) / TURRET_CONFIG.duration;
+                if (progress > 0) {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size + 5, -PI / 2, -PI / 2 + TWO_PI * progress);
+
+                    // 章鱼不存在时显示为灰色暂停状态
+                    if (!octopus || octopus.vanished) {
+                        ctx.strokeStyle = 'rgba(150, 150, 150, 0.7)';
+                    } else {
+                        ctx.strokeStyle = 'rgba(0, 200, 255, 0.7)';
+                    }
+
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // 章鱼不存在时显示暂停图标
+                if (!octopus || octopus.vanished) {
+                    ctx.fillStyle = 'rgba(150, 150, 150, 0.7)';
+                    ctx.fillRect(this.x - 3, this.y - 6, 2, 12);
+                    ctx.fillRect(this.x + 1, this.y - 6, 2, 12);
+                }
+
+                ctx.restore();
+            }
+        });
+
+
+        /**
          * Item
          * 
          * @super Point
@@ -1595,6 +2922,8 @@
             },
 
             draw: function (ctx) {
+                ctx.save();
+                ctx.strokeStyle = this.wepon.color;
                 this.path.draw(ctx);
                 // 対角線を描画
                 this.path.eachPoints(function (p, i) {
@@ -1603,6 +2932,7 @@
                     var p2 = this[i + 3];
                     ctx.lineTo(p2.x, p2.y);
                 });
+                ctx.restore();
             }
         });
 
@@ -1614,6 +2944,11 @@
          */
         function Splinter(x, y, radius, num) {
             Point.call(this, x, y);
+
+            // 检查并限制总数
+            while (splinters.length >= MAX_SPLINTERS && splinters.length > 0) {
+                splinters.shift(); // 移除最旧的splinter
+            }
 
             var values = this._values = [];
             for (var i = 0; i < num; i++) {
